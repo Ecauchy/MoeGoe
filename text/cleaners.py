@@ -214,6 +214,28 @@ _bopomofo_to_romaji = [(re.compile('%s' % x[0], re.IGNORECASE), x[1]) for x in [
 ]]
 
 
+# Map of (sokuon, voice) pairs:
+_sokuon_to_voice = {
+  'b': 'p',
+  'c': 't',
+  'd': 't',
+  'f': 'f',
+  'g': 'k',
+  'j': 't',
+  'k': 'k',
+  'l': 'l',
+  'm': 'm',
+  'n': 'n',
+  'p': 'p',
+  'q': 'k',
+  'r': 'r',
+  's': 's',
+  't': 't',
+  'v': 'f',
+  'z': 't'
+}
+
+
 def expand_abbreviations(text):
   for regex, replacement in _abbreviations:
     text = re.sub(regex, replacement, text)
@@ -275,6 +297,63 @@ def japanese_to_romaji_with_accent(text):
     if i<len(marks):
       text += unidecode(marks[i]).replace(' ','')
   return text
+
+
+def japanese_to_full_romaji_with_tone_letters(text):
+  '''Reference https://r9y9.github.io/ttslearn/latest/notebooks/ch10_Recipe-Tacotron.html'''
+  text = symbols_to_japanese(text)
+  sentences = re.split(_japanese_marks, text)
+  marks = re.findall(_japanese_marks, text)
+  text = ''
+  for i, sentence in enumerate(sentences):
+    if re.match(_japanese_characters, sentence):
+      if text != '':
+        text += ' '
+      labels = pyopenjtalk.extract_fullcontext(sentence)
+      for n, label in enumerate(labels):
+        # p3
+        phoneme = re.search(r'\-([^\+]*)\+', label).group(1)
+        if phoneme in ['sil', 'pau']:
+          continue
+
+        a3 = int(re.search(r"\+(\d+)/", label).group(1))
+        # p4
+        phoneme_next = re.search(r"\+([^=]*)=", label).group(1)
+        if a3 != 1:
+          cl_replace = real_voice_for_sokkuon(phoneme_next)
+        else:
+          cl_replace = 'Q'
+        text += phoneme.replace('ch', 'ʧ').replace('sh', 'ʃ').replace('ts', 'ʦ').replace('cl', cl_replace)
+
+        a1 = int(re.search(r"/A:(\-?[0-9]+)\+", label).group(1))
+        a2 = int(re.search(r"\+(\d+)\+", label).group(1))
+        if phoneme_next in ['sil', 'pau']:
+          a2_next = -1
+        else:
+          a2_next = int(re.search(r"\+(\d+)\+", labels[n + 1]).group(1))
+
+        # the same mora
+        if a2_next == a2:
+          continue
+        # morae after the accent. L or ˧ for low.
+        if a1 > 0:
+          text += '˧'
+        # the mora the accent is on. H or ˥ for high.
+        elif a1 == 0:
+          text += '˥'
+        # the first mora, also before the accent. L or ˧ for low.
+        elif a2 == 1:
+          text += '˧'
+        # other morae before the accent. H or ˥ for high.
+        else:
+          text += '˥'
+    if i < len(marks):
+      text += unidecode(marks[i]).replace(' ', '').replace('...','…')
+  return text
+
+
+def real_voice_for_sokkuon(phoneme_next):
+  return _sokuon_to_voice.get(phoneme_next[0], 'Q')
 
 
 def latin_to_hangul(text):
@@ -447,6 +526,13 @@ def japanese_cleaners(text):
 
 def japanese_cleaners2(text):
   return japanese_cleaners(text).replace('ts','ʦ').replace('...','…')
+
+
+def japanese_cleaners3(text):
+  text = japanese_to_full_romaji_with_tone_letters(text)
+  if re.match('[A-Za-z]', text[-1]):
+    text += '.'
+  return text
 
 
 def korean_cleaners(text):
