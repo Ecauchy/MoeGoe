@@ -319,21 +319,29 @@ def japanese_to_full_romaji_with_tone_letters(text):
         a3 = int(re.search(r"\+(\d+)/", label).group(1))
         # p4
         phoneme_next = re.search(r"\+([^=]*)=", label).group(1)
-        if a3 != 1:
-          cl_replace = real_voice_for_sokkuon(phoneme_next)
+        if phoneme == 'cl':
+          if a3 != 1:
+            cl_replace = real_voice_for_sokkuon(phoneme_next)
+          else:
+            cl_replace = 'Q'
+          text = text[:-1] + cl_replace + text[-1:]
+          continue
         else:
-          cl_replace = 'Q'
-        text += phoneme.replace('ch', 'ʧ').replace('sh', 'ʃ').replace('ts', 'ʦ').replace('cl', cl_replace)
+          text += phoneme.replace('ch', 'ʧ').replace('sh', 'ʃ').replace('ts', 'ʦ')
 
         a1 = int(re.search(r"/A:(\-?[0-9]+)\+", label).group(1))
         a2 = int(re.search(r"\+(\d+)\+", label).group(1))
+        f5 = int(re.search(r"@(\d+)_", label).group(1))
+        i3 = int(re.search(r"@(\d+)\+", label).group(1))
         if phoneme_next in ['sil', 'pau']:
-          a2_next = -1
+          a2_next, f5_next, i3_next = -1, -1, -1
         else:
           a2_next = int(re.search(r"\+(\d+)\+", labels[n + 1]).group(1))
+          f5_next = int(re.search(r"@(\d+)_", labels[n + 1]).group(1))
+          i3_next = int(re.search(r"@(\d+)\+", labels[n + 1]).group(1))
 
-        # the same mora
-        if a2_next == a2:
+        # the same mora, the same accent phrase, the same breath group
+        if (a2_next == a2) and (f5_next == f5) and (i3_next == i3):
           continue
         # morae after the accent. L or ˧ for low.
         if a1 > 0:
@@ -347,8 +355,11 @@ def japanese_to_full_romaji_with_tone_letters(text):
         # other morae before the accent. H or ˥ for high.
         else:
           text += '˥'
+        # Accent phrase boundary
+        if (a3 == 1) and (a2_next == 1):
+          text += ' '
     if i < len(marks):
-      text += unidecode(marks[i]).replace(' ', '').replace('...','…')
+      text += unidecode(marks[i]).replace(' ', '')
   return text
 
 
@@ -530,9 +541,9 @@ def japanese_cleaners2(text):
 
 def japanese_cleaners3(text):
   text = japanese_to_full_romaji_with_tone_letters(text)
-  if re.match('[A-Za-z]', text[-1]):
+  if re.match('[˥˦˧˨˩]', text[-1]):
     text += '.'
-  return text
+  return text.replace('...','…')
 
 
 def korean_cleaners(text):
